@@ -162,3 +162,42 @@ def test_flow_conservation(data):
         assert incoming == outgoing
     
     print("PASS: Flow is conserved at all intermediate nodes")
+
+#------------------------
+# Equivalence checking
+#------------------------
+
+@given(generate_flow_input())
+def test_maxflow_mincut(data):
+    """
+    Property:
+    The value of the maximum flow from source (s) to sink (t) is equal to
+    the capacity of the minimum cut separating s and t.
+
+    Mathematical basis:
+    This is the Max-Flow Min-Cut Theorem, a fundamental theorem in graph theory.
+    It states that the maximum achievable flow in a network is equal to
+    the capacity of the smallest cut that separates the source from the sink.
+
+    Test strategy:
+    Random directed graphs with capacities are generated using Hypothesis.
+    For each graph, we compute:
+      - Maximum flow value using nx.maximum_flow
+      - Minimum cut capacity using nx.minimum_cut
+    The test verifies that both values are equal.
+
+    Why this matters:
+    If this property fails, it indicates a serious violation of flow theory
+    or a bug in the max-flow or min-cut implementation, since these two
+    quantities are theoretically guaranteed to be equal.
+    """
+    G, s, t = data
+
+    flow_value, flow_dict = nx.maximum_flow(G, s, t)
+    cut_value, (reachable, non_reachable) = nx.minimum_cut(G, s, t)
+    # where reachable is set of nodes that can still be reached from source s in the residual graph
+    # while non_reachable is the set of nodes that are not reachable from s after cut
+    
+    assert flow_value == cut_value
+
+    print("PASS: Max-flow equals min-cut")
