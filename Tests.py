@@ -1,11 +1,3 @@
-# =========================
-# Shravya's Section
-# =========================
-
-# TODO: Add property-based tests for SCC detection in NetworkX using Hypothesis
-
-
-
 import networkx as nx
 from hypothesis import given, strategies as st
 
@@ -59,3 +51,114 @@ def test_scc_reachability(G):
                 assert nx.has_path(G, v, u), f"FAIL: Path not found from {v} to {u}"
     
     print(f"PASS: All {len(sccs)} SCC(s) satisfy mutual reachability property")
+
+
+# =========================
+# Shravya's Section
+# =========================
+
+# Property-based tests on Maximum Flow NetworkX functions, using the Hypothesis library
+
+# ---------- Property test input generator ----------
+@st.composite
+def generate_flow_input(draw):
+    n = draw(st.integers(min_value=2, max_value=20))
+    edges = draw(
+        st.lists(
+            st.tuples(
+                st.integers(0, n - 1),
+                st.integers(0, n - 1),
+                st.integers(1, 20)
+            ),
+            min_size=1,
+            max_size=n * n
+        )
+    )
+    G = nx.DiGraph()
+    G.add_nodes_from(range(n))
+
+    for u, v, cap in edges:
+        # Avoid self loops
+        if u != v:
+            G.add_edge(u, v, capacity=cap)
+
+    # ensure s != t 
+    s = draw(st.integers(0, n - 1))
+    possible_t = list(range(n))
+    possible_t.remove(s)
+    t = draw(st.sampled_from(possible_t))
+
+    return G, s, t
+
+#------------------------
+# Invariant-1
+#------------------------
+@given(generate_flow_input())
+def test_capacity_constraint(data):
+    """
+    Property:
+    For every edge (u, v), the flow f(u, v) satisfies:
+    0 ≤ f(u, v) ≤ capacity(u, v).
+
+    Mathematical basis:
+    This is a fundamental constraint for a feasible flow. 
+    Flow cannot be negative,
+    and it cannot exceed the capacity assigned to an edge.
+
+    Test strategy:
+    Random directed graphs with capacities are generated using Hypothesis.
+    For each generated graph, maximum flow is computed using NetworkX.
+    The flow assigned to each edge is checked against its capacity.
+
+    Why this matters:
+    If this property fails, the algorithm is producing an invalid flow that
+    violates basic feasibility invariants, indicating a serious correctness issue.
+    """
+    G, s, t = data
+    flow_value, flow_dict = nx.maximum_flow(G, s, t)
+
+    for u, v in G.edges:
+        flow = flow_dict[u][v]
+        capacity = G[u][v]['capacity']
+
+        assert flow >= 0
+        assert flow <= capacity
+    
+    print("PASS: All edges satisfy capacity constraints")
+
+#------------------------
+# Invariant-2
+#------------------------
+@given(generate_flow_input())
+def test_flow_conservation(data):
+    """
+    Property:
+    For every node u other than source (s) and sink (t),
+    the total incoming flow equals the total outgoing flow.
+
+    Mathematical basis:
+    This follows from the conservation of flow principle.
+    Intermediate nodes cannot create or destroy flow; they only pass it along.
+
+    Test strategy:
+    Random directed graphs with capacities are generated.
+    After computing maximum flow, for each intermediate node,
+    the sum of incoming flows is compared with the sum of outgoing flows.
+
+    Why this matters:
+    If this property fails, it indicates that flow is either being lost
+    or artificially created at some node, violating fundamental flow rules.
+    """
+    G, s, t = data
+    flow_value, flow_dict = nx.maximum_flow(G, s, t)
+
+    for u in G.nodes:
+        if u == s or u == t:
+            continue
+
+        incoming = sum(flow_dict[v].get(u, 0) for v in G.nodes)
+        outgoing = sum(flow_dict[u].get(v, 0) for v in G.nodes)
+
+        assert incoming == outgoing
+    
+    print("PASS: Flow is conserved at all intermediate nodes")
