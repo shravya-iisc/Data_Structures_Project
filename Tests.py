@@ -201,3 +201,102 @@ def test_maxflow_mincut(data):
     assert flow_value == cut_value
 
     print("PASS: Max-flow equals min-cut")
+
+#------------------------
+# Postcondition-1
+#------------------------
+@given(generate_flow_input())
+def test_source_outgoing_equals_flow_value(data):
+    """
+    Property:
+    The total outgoing flow from the source node equals the computed maximum flow value.
+
+    Mathematical basis:
+    The value of the flow is defined as the net amount leaving the source.
+    So the sum of flows on all edges outgoing from the source must equal the
+    maximum flow computed by the algorithm.
+
+    Test strategy:
+    Generate random directed graphs with capacities using Hypothesis.
+    Compute the maximum flow and compare it with the total outgoing flow from the source.
+
+    Why this matters:
+    If this property fails, it indicates inconsistency in how flow value is computed,
+    suggesting a bug in the f.
+    """
+    G, s, t = data
+
+    flow_value, flow_dict = nx.maximum_flow(G, s, t)
+    outgoing = sum(flow_dict[s].get(v, 0) for v in G.nodes)
+
+    assert flow_value == outgoing
+
+    print("PASS: Source outgoing flow matches max flow value")
+
+#------------------------
+# Postcondition-2
+#------------------------
+@given(generate_flow_input())
+def test_sink_incoming_equals_flow_value(data):
+    """
+    Property:
+    The total incoming flow into the sink node equals the computed maximum flow value.
+
+    Mathematical basis:
+    By flow conservation, all flow leaving the source must eventually reach the sink.
+    So the total incoming flow at the sink equals the total flow value.
+
+    Test strategy:
+    Generate random graphs and compare the sum of incoming flows at the sink with
+    the maximum flow value.
+
+    Why this matters:
+    If this fails, it indicates incorrect flow propagation at the sink,
+    violating conservation principles.
+    """
+    G, s, t = data
+
+    flow_value, flow_dict = nx.maximum_flow(G, s, t)
+    incoming = sum(flow_dict[v].get(t, 0) for v in G.nodes)
+
+    assert flow_value == incoming
+
+    print("PASS: Sink incoming flow matches max flow value")
+
+#------------------------
+# Metamorphic Property
+#------------------------
+@given(generate_flow_input())
+def test_adding_edge_does_not_decrease_flow(data):
+    """
+    Property:
+    Adding a direct edge from source (s) to sink (t) 
+    cannot decrease the maximum flow.
+
+    Mathematical basis:
+    Adding an edge increases or preserves the number of possible augmenting paths.
+    The original flow remains valid, and a new direct path from s to t may allow
+    additional flow. So, the maximum flow value cannot decrease.
+
+    Test strategy:
+    Generate a random directed graph with capacities.
+    Compute the maximum flow.
+    Then add a direct edge from source to sink with positive capacity.
+    Recompute the flow and verify that it does not decrease.
+
+    Why this matters:
+    If violated, it indicates incorrect handling of graph updates or flow computation.
+    """
+    G, s, t = data
+
+    flow_value_1, _ = nx.maximum_flow(G, s, t)
+    # Copy graph
+    G2 = G.copy()
+    # Add direct edge from source to sink (strongest possible path (edge-case))
+    if not G2.has_edge(s, t):
+        G2.add_edge(s, t, capacity=10)
+        flow_value_2, _ = nx.maximum_flow(G2, s, t)
+
+        assert flow_value_2 >= flow_value_1
+
+        print("PASS: Adding source→sink edge does not decrease max flow")
