@@ -409,3 +409,94 @@ def test_adding_edge_does_not_decrease_flow(data):
         assert flow_value_2 >= flow_value_1
 
         print("PASS: Adding source→sink edge does not decrease max flow")
+
+        # =========================
+        # Hafsa's Section
+        # =========================
+
+        # Property-based tests for Dijkstra's Algorithm in NetworkX.
+        # Dijkstra's finds the shortest paths from a source node to all others in graphs with non-negative weights.
+
+        # =========================
+        # Hafsa's Section: Dijkstra
+        # =========================
+
+    @st.composite
+    def weighted_graphs(draw):
+        """Custom strategy for weighted graphs with non-negative weights[cite: 57]."""
+        n = draw(st.integers(2, 15))
+        edges = draw(st.lists(st.tuples(st.integers(0, n - 1), st.integers(0, n - 1), st.integers(0, 100))))
+        G = nx.Graph()
+        G.add_nodes_from(range(n))
+        for u, v, w in edges:
+            if u != v: G.add_edge(u, v, weight=w)
+        return G, draw(st.integers(0, n - 1))
+
+    @given(weighted_graphs())
+    def test_dijkstra_triangle_inequality(data):
+        """
+        Property: Shortest paths must satisfy Triangle Inequality[cite: 18, 30].
+        Mathematical Basis: For nodes u, v, w, dist(u, w) <= dist(u, v) + weight(v, w)[cite: 31].
+        Test Strategy: Verify the inequality for all reachable edges[cite: 31].
+        """
+        G, s = data
+        dist = nx.single_source_dijkstra_path_length(G, s)
+        for v, w in G.edges:
+            if v in dist and w in dist:
+                weight = G[v][w]['weight']
+                assert dist[w] <= dist[v] + weight
+                assert dist[v] <= dist[w] + weight
+
+    @given(weighted_graphs())
+    def test_dijkstra_path_optimality(data):
+        """
+        Property: Sub-paths of shortest paths are also shortest paths[cite: 18, 30].
+        Mathematical Basis: If P is a shortest path, every sub-segment must be optimal[cite: 31].
+        Test Strategy: Verify dist[target] = dist[predecessor] + edge_weight[cite: 31].
+        """
+        G, s = data
+        paths = nx.single_source_dijkstra_path(G, s)
+        dist = nx.single_source_dijkstra_path_length(G, s)
+        for target, path in paths.items():
+            if len(path) > 1:
+                prev_node = path[-2]
+                assert dist[target] == dist[prev_node] + G[prev_node][target]['weight']
+
+    @given(weighted_graphs())
+    def test_dijkstra_non_negativity(data):
+        """Property: All computed distances must be non-negative[cite: 23]."""
+        G, s = data
+        dist = nx.single_source_dijkstra_path_length(G, s)
+        assert dist[s] == 0
+        for d in dist.values():
+            assert d >= 0
+
+    @given(weighted_graphs())
+    def test_dijkstra_weight_scaling(data):
+        """
+        Property: Scaling all weights by k scales all distances by k[cite: 24, 30].
+        Metamorphic Property: Linear transformation of input preserves path structure[cite: 31].
+        """
+        G, s = data
+        dist1 = nx.single_source_dijkstra_path_length(G, s)
+        G2 = G.copy()
+        for u, v in G2.edges: G2[u][v]['weight'] *= 2
+        dist2 = nx.single_source_dijkstra_path_length(G2, s)
+        for node in dist1:
+            assert dist2[node] == dist1[node] * 2
+
+    @given(weighted_graphs())
+    def test_dijkstra_monotone_increase(data):
+        """
+        Property: Increasing an edge weight cannot decrease path length[cite: 24, 30].
+        Test Strategy: Increase one edge weight and ensure no distance decreases[cite: 31].
+        """
+        G, s = data
+        dist1 = nx.single_source_dijkstra_path_length(G, s)
+        if not G.edges: return
+        u, v = list(G.edges)[0]
+        G[u][v]['weight'] += 10
+        dist2 = nx.single_source_dijkstra_path_length(G, s)
+        for node in dist1:
+            assert dist2[node] >= dist1[node]
+
