@@ -5,6 +5,9 @@ from hypothesis import given, strategies as st
 # Manju's Section
 # =========================
 
+# Property-based tests on SCC (Strongly Connected Components) Detection in NetworkX.
+# SCCs are sets of nodes where every pair is mutually reachable.
+# Below mentioned tests are to verify key properties of SCC algorithms using random directed graphs.
 
 def directed_graphs(min_nodes=1, max_nodes=20):
     return st.builds(
@@ -36,8 +39,11 @@ def test_scc_reachability(G):
         u → v  AND  v → u
     (both directions reachable)
 
-    Why Important:
-    This is *the definition* of SCC. Any violation indicates a core bug in
+    Test Strategy:
+    For each SCC, check every pair of nodes for bidirectional paths.
+
+    Why this is important:
+    This is the definition of SCC. Any violation indicates a core bug in
     SCC detection or in reachability routines.
     """
     sccs = list(nx.strongly_connected_components(G))
@@ -47,10 +53,113 @@ def test_scc_reachability(G):
         for i in range(len(comp)):
             for j in range(i + 1, len(comp)):
                 u, v = comp[i], comp[j]
+                # Check path from u to v
                 assert nx.has_path(G, u, v), f"FAIL: Path not found from {u} to {v}"
+                # Check path from v to u
                 assert nx.has_path(G, v, u), f"FAIL: Path not found from {v} to {u}"
     
     print(f"PASS: All {len(sccs)} SCC(s) satisfy mutual reachability property")
+
+
+@given(directed_graphs())
+def test_scc_partition(G):
+    """
+    Property: SCCs form a partition of the nodes - they are disjoint and cover all nodes.
+
+    Mathematical Basis:
+    SCCs should partition the vertex set: every node belongs to exactly one SCC,
+    and SCCs are pairwise disjoint.
+
+    Test Strategy:
+    Collect all nodes in SCCs and check they match graph nodes exactly.
+    Also ensure no node appears in multiple SCCs.
+
+    Why this is important:
+    This ensures no node is missed or duplicated in SCC computation.
+    """
+    sccs = list(nx.strongly_connected_components(G))
+    
+    # Check coverage: all nodes are in some SCC
+    all_nodes = set(G.nodes)
+    covered = set()
+    for comp in sccs:
+        covered.update(comp)
+    assert covered == all_nodes, "FAIL: Not all nodes are covered by SCCs"
+    
+    # Check disjointness: no node in more than one SCC
+    seen = set()
+    for comp in sccs:
+        for node in comp:
+            assert node not in seen, f"FAIL: Node {node} in multiple SCCs"
+            seen.add(node)
+    
+    print(f"PASS: SCCs form a valid partition of {len(all_nodes)} nodes")
+
+
+@given(directed_graphs())
+def test_condensation_is_dag(G):
+    """
+    Property: The condensation graph (where each SCC is a supernode) is a Directed Acyclic Graph (DAG).
+
+    Mathematical Basis:
+    A cycle in the condensation would imply that multiple SCCs form a bigger cycle.
+    But SCCs are maximal sets of nodes such that every node can reach every other node
+
+    If two SCCs had a cycle between them, they would not be separate SCCs—they would form one larger SCC.
+    Thus cycles between SCCs are impossible.
+    
+    In the condensation, there are no cycles between SCCs, making it acyclic.
+    This follows from the definition of SCCs.
+
+    Test Strategy:
+    Compute the condensation and check if it's a DAG using NetworkX.
+
+    Why this is important:
+    SCCs condense cycles into single nodes, so the resulting graph should be acyclic.
+    """
+    condensation = nx.condensation(G)
+    # Verify it's acyclic
+    assert nx.is_directed_acyclic_graph(condensation), "FAIL: Condensation graph has a cycle"
+    
+    print("PASS: Condensation graph is a DAG")
+
+
+@given(directed_graphs())
+def test_scc_reachability_implies_condensation_path(G):
+    """
+    Property: If there is a path from u to v in the original graph, then there is a path
+    from SCC(u) to SCC(v) in the condensation graph.
+
+    Mathematical Basis:
+    Since paths between SCCs are preserved in the condensation,
+    reachability in the original graph implies reachability in the condensation.
+
+    Test Strategy:
+    Map nodes to their SCCs, then for every reachable pair (u,v) where SCC(u) != SCC(v),
+    check if SCC(u) reaches SCC(v) in condensation.
+
+    Why this is important:
+    This ensures the condensation correctly captures inter-SCC connectivity.
+    """
+    sccs = list(nx.strongly_connected_components(G))
+    node_to_scc = {}
+    for idx, comp in enumerate(sccs):
+        for node in comp:
+            node_to_scc[node] = idx
+    
+    condensation = nx.condensation(G)
+    
+    # Check for all pairs u,v: if path in G, then path in condensation
+    for u in G.nodes:
+        for v in G.nodes:
+            if u != v and nx.has_path(G, u, v):
+                scc_u = node_to_scc[u]
+                scc_v = node_to_scc[v]
+                if scc_u != scc_v:
+                    assert nx.has_path(condensation, scc_u, scc_v), \
+                        f"FAIL: Path from SCC {scc_u} to SCC {scc_v} missing in condensation"
+    
+    print("PASS: Original reachability implies condensation reachability")
 
 
 # =========================
