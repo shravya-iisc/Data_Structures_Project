@@ -162,6 +162,97 @@ def test_scc_reachability_implies_condensation_path(G):
     print("PASS: Original reachability implies condensation reachability")
 
 
+@given(directed_graphs())
+def test_scc_maximality(G):
+    """
+    Property: SCCs are maximal strongly connected subgraphs.
+
+    Mathematical Basis:
+    If two nodes u and v are in different SCCs, then they cannot be mutually reachable.
+    If both u → v and v → u were true, then u and v would belong to the same SCC.
+
+    Test Strategy:
+    For every pair of nodes in distinct SCCs, ensure at least one direction is unreachable.
+
+    Why this is important:
+    This verifies that SCC detection does not split a true strongly connected component.
+    """
+    sccs = list(nx.strongly_connected_components(G))
+    node_to_scc = {}
+    for idx, comp in enumerate(sccs):
+        for node in comp:
+            node_to_scc[node] = idx
+
+    for u in G.nodes:
+        for v in G.nodes:
+            if u != v and node_to_scc[u] != node_to_scc[v]:
+                if nx.has_path(G, u, v) and nx.has_path(G, v, u):
+                    raise AssertionError(
+                        f"FAIL: Nodes {u} and {v} are mutually reachable but assigned to different SCCs"
+                    )
+
+    print("PASS: SCC maximality holds for all node pairs")
+
+
+@given(directed_graphs())
+def test_condensation_preserves_inter_scc_edges(G):
+    """
+    Property: Every inter-SCC edge in the original graph appears in the condensation graph.
+
+    Mathematical Basis:
+    The condensation graph abstracts each SCC as a single node and must preserve all edges
+    between different SCCs as edges between the corresponding supernodes.
+
+    Test Strategy:
+    For each original edge (u, v) connecting distinct SCCs, verify the condensation contains
+    the corresponding edge between SCC(u) and SCC(v).
+
+    Why this is important:
+    This ensures the condensation is a faithful representation of inter-SCC connectivity.
+    """
+    sccs = list(nx.strongly_connected_components(G))
+    node_to_scc = {}
+    for idx, comp in enumerate(sccs):
+        for node in comp:
+            node_to_scc[node] = idx
+
+    condensation = nx.condensation(G)
+
+    for u, v in G.edges:
+        scc_u = node_to_scc[u]
+        scc_v = node_to_scc[v]
+        if scc_u != scc_v:
+            assert condensation.has_edge(scc_u, scc_v), \
+                f"FAIL: Edge ({u},{v}) across SCCs missing in condensation as ({scc_u},{scc_v})"
+
+    print("PASS: Condensation preserves all inter-SCC edges")
+
+
+@given(directed_graphs())
+def test_scc_dag_singleton_components(G):
+    """
+    Property: A directed acyclic graph has only singleton SCCs.
+
+    Mathematical Basis:
+    If a directed graph has no cycles, no two distinct nodes can be mutually reachable.
+    Therefore every SCC must consist of exactly one node.
+
+    Test Strategy:
+    When G is acyclic, verify every computed SCC contains a single node.
+
+    Why this is important:
+    This checks that SCC detection correctly collapses cycles and does not create
+    larger components in acyclic graphs.
+    """
+    if nx.is_directed_acyclic_graph(G):
+        sccs = list(nx.strongly_connected_components(G))
+        for comp in sccs:
+            assert len(comp) == 1, f"FAIL: Acyclic graph has non-singleton SCC {comp}"
+        print("PASS: Acyclic graphs yield only singleton SCCs")
+    else:
+        print("SKIP: Graph is not acyclic; singleton-SCC property not applicable")
+
+
 # =========================
 # Shravya's Section
 # =========================
